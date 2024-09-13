@@ -1,10 +1,9 @@
 from flask import Flask, jsonify, request, redirect
 import psycopg2
 import stripe
-import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("main")
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger("main")
 
 
 DB_CONFIG = {
@@ -94,36 +93,41 @@ def payment_sheet():
     customer_name = data['name'] 
     customer_address = data['address']
 
-    my_customer = stripe.Customer.create(
-        name= customer_name,
-        address= customer_address
-        )
-    
-    ephemeralKey = stripe.EphemeralKey.create(
-        customer=my_customer['id'],
-        stripe_version='2020-08-27',
-    )
 
-    paymentIntent = stripe.PaymentIntent.create(
-        amount=1099,
-        currency='usd',
-        customer=my_customer['id']
-    )
-    
-    create_payment(user_id, paymentIntent.id)
-    
-    
-    return jsonify(
-        paymentIntent=paymentIntent.client_secret,
-        ephemeralKey=ephemeralKey.secret,
-        customer=my_customer.id,
-        publishableKey= stripe_publishable_key
+    try:
+        my_customer = stripe.Customer.create(
+            name= customer_name,
+            address= customer_address
+            )
+        
+        ephemeralKey = stripe.EphemeralKey.create(
+            customer=my_customer['id'],
+            stripe_version='2020-08-27',
         )
+
+        paymentIntent = stripe.PaymentIntent.create(
+            amount=1099,
+            currency='usd',
+            customer=my_customer['id']
+        )
+        
+        create_payment(user_id, paymentIntent.id)
+        
+        
+        return jsonify(
+            payment_intent = paymentIntent.client_secret,
+            ephemeral_key = ephemeralKey.secret,
+            customer = my_customer.id,
+            publishable_key = stripe_publishable_key
+            )
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+        
 
 
 #--------Database operations-----#
-
-
 
 def create_payment(user_id:int, payment_id:str):
     try:
@@ -149,14 +153,12 @@ def stripe_webhook():
             payment_intent = event['data']['object']
             payment_intent_id = payment_intent['id']
             
-            logging.info(f"Payment Successfull, Intent ID: {payment_intent_id}")
             cursor.callproc('update_payment_status', [payment_intent_id, 'COMPLETED'])
             
         elif event['type'] == 'payment_intent.canceled':
             payment_intent = event['data']['object']
             payment_intent_id = payment_intent['id']
             
-            logging.info(f"Payment Cancelled, Intent ID: {payment_intent_id}")
             cursor.callproc('update_payment_status', [payment_intent_id, 'CANCELLED'])
 
         return jsonify(success=True)

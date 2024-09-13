@@ -5,5 +5,4 @@
 azure-functions
 flask
 stripe
-logging
 psycopg2-binary
